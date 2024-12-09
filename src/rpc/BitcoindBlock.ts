@@ -1,4 +1,4 @@
-import {BtcBlock} from "crosslightning-base";
+import {BtcBlock} from "@atomiqlabs/base";
 
 export type BitcoindBlockType = {
     hash: string,

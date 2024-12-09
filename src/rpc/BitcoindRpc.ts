@@ -1,6 +1,6 @@
 import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
-import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "crosslightning-base";
+import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
 import * as bitcoin from "bitcoinjs-lib";
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
 
