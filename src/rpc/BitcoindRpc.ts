@@ -189,6 +189,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         return {
             blockhash: retrievedTx.blockhash,
             confirmations: retrievedTx.confirmations,
+            vsize: retrievedTx.vsize,
             txid: retrievedTx.txid,
             hex: resultHex,
             outs: retrievedTx.vout,
@@ -240,6 +241,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
                 return {
                     blockhash: tx.blockhash,
                     confirmations: tx.confirmations,
+                    vsize: tx.vsize,
                     txid: tx.txid,
                     hex: resultHex,
                     outs: tx.vout,
