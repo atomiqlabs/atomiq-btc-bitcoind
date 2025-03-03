@@ -174,7 +174,11 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         if(retrievedTx==null) return null;
 
         //Strip witness data
-        const btcTx = Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"));
+        const btcTx = Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
+            allowLegacyWitnessUtxo: true,
+            allowUnknownInputs: true,
+            allowUnknownOutputs: true
+        });
         const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
         retrievedTx.vout.forEach(e => {
@@ -228,7 +232,11 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             hash: block.hash,
             height: block.height,
             tx: block.tx.map(tx => {
-                const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"));
+                const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
+                    allowLegacyWitnessUtxo: true,
+                    allowUnknownInputs: true,
+                    allowUnknownOutputs: true
+                });
                 const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
                 return {

@@ -89,7 +89,11 @@ class BitcoindRpc {
             if (retrievedTx == null)
                 return null;
             //Strip witness data
-            const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"));
+            const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
+                allowLegacyWitnessUtxo: true,
+                allowUnknownInputs: true,
+                allowUnknownOutputs: true
+            });
             const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
             retrievedTx.vout.forEach(e => {
                 e.value = parseInt(e.value.toFixed(8).replace(new RegExp("\\.", 'g'), ""));
@@ -137,7 +141,11 @@ class BitcoindRpc {
                 hash: block.hash,
                 height: block.height,
                 tx: block.tx.map(tx => {
-                    const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(tx.hex, "hex"));
+                    const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
+                        allowLegacyWitnessUtxo: true,
+                        allowUnknownInputs: true,
+                        allowUnknownOutputs: true
+                    });
                     const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
                     return {
                         blockhash: tx.blockhash,
