@@ -12,8 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BitcoindRpc = void 0;
 const BitcoindBlock_1 = require("./BitcoindBlock");
 const BTCMerkleTree_1 = require("./BTCMerkleTree");
-const bitcoin = require("bitcoinjs-lib");
 const RpcClient = require("@atomiqlabs/bitcoind-rpc");
+const btc_signer_1 = require("@scure/btc-signer");
 class BitcoindRpc {
     constructor(protocol, user, pass, host, port) {
         this.rpc = new RpcClient({
@@ -89,11 +89,8 @@ class BitcoindRpc {
             if (retrievedTx == null)
                 return null;
             //Strip witness data
-            const btcTx = bitcoin.Transaction.fromHex(retrievedTx.hex);
-            for (let txIn of btcTx.ins) {
-                txIn.witness = []; //Strip witness data
-            }
-            const resultHex = btcTx.toHex();
+            const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"));
+            const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
             retrievedTx.vout.forEach(e => {
                 e.value = parseInt(e.value.toFixed(8).replace(new RegExp("\\.", 'g'), ""));
             });
@@ -140,11 +137,8 @@ class BitcoindRpc {
                 hash: block.hash,
                 height: block.height,
                 tx: block.tx.map(tx => {
-                    const btcTx = bitcoin.Transaction.fromHex(tx.hex);
-                    for (let txIn of btcTx.ins) {
-                        txIn.witness = []; //Strip witness data
-                    }
-                    const resultHex = btcTx.toHex();
+                    const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(tx.hex, "hex"));
+                    const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
                     return {
                         blockhash: tx.blockhash,
                         confirmations: tx.confirmations,
