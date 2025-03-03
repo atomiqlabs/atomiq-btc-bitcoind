@@ -92,7 +92,8 @@ class BitcoindRpc {
             const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
                 allowLegacyWitnessUtxo: true,
                 allowUnknownInputs: true,
-                allowUnknownOutputs: true
+                allowUnknownOutputs: true,
+                disableScriptCheck: true
             });
             const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
             retrievedTx.vout.forEach(e => {
@@ -144,7 +145,8 @@ class BitcoindRpc {
                     const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
                         allowLegacyWitnessUtxo: true,
                         allowUnknownInputs: true,
-                        allowUnknownOutputs: true
+                        allowUnknownOutputs: true,
+                        disableScriptCheck: true
                     });
                     const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
                     return {

@@ -177,7 +177,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         const btcTx = Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
             allowLegacyWitnessUtxo: true,
             allowUnknownInputs: true,
-            allowUnknownOutputs: true
+            allowUnknownOutputs: true,
+            disableScriptCheck: true
         });
         const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
@@ -235,7 +236,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
                 const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
                     allowLegacyWitnessUtxo: true,
                     allowUnknownInputs: true,
-                    allowUnknownOutputs: true
+                    allowUnknownOutputs: true,
+                    disableScriptCheck: true
                 });
                 const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
