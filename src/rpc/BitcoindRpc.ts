@@ -2,7 +2,8 @@ import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
 import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
-import {Transaction} from "@scure/btc-signer";
+import {Script, Transaction} from "@scure/btc-signer";
+import {Buffer} from "buffer";
 
 export type BitcoindVout = {
     value: number,
@@ -82,6 +83,44 @@ type BitcoindBlockchainInfo = {
     automatic_pruning : boolean,
     prune_target_size : number,
     warnings : string
+}
+
+function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
+    return {
+        locktime: btcTx.lockTime,
+        version: btcTx.version,
+        blockhash: null,
+        confirmations: 0,
+        txid: btcTx.id,
+        hex: Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
+        raw: Buffer.from(btcTx.toBytes()).toString("hex"),
+        vsize: btcTx.vsize,
+
+        outs: Array.from({length: btcTx.outputsLength}, (_, i) => i).map((index) => {
+            const output = btcTx.getOutput(index);
+            return {
+                value: Number(output.amount),
+                n: index,
+                scriptPubKey: {
+                    asm: Script.decode(output.script).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: Buffer.from(output.script).toString("hex")
+                }
+            }
+        }),
+        ins: Array.from({length: btcTx.inputsLength}, (_, i) => i).map(index => {
+            const input = btcTx.getInput(index);
+            return {
+                txid: Buffer.from(input.txid).toString("hex"),
+                vout: input.index,
+                scriptSig: {
+                    asm: Script.decode(input.finalScriptSig).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: Buffer.from(input.finalScriptSig).toString("hex")
+                },
+                sequence: input.sequence,
+                txinwitness: input.finalScriptWitness.map(witness => Buffer.from(witness).toString("hex"))
+            }
+        })
+    }
 }
 
 export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
@@ -187,6 +226,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
 
         return {
+            locktime: retrievedTx.locktime,
+            version: retrievedTx.version,
             blockhash: retrievedTx.blockhash,
             confirmations: retrievedTx.confirmations,
             vsize: retrievedTx.vsize,
@@ -242,6 +283,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
                 const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
                 return {
+                    locktime: tx.locktime,
+                    version: tx.version,
                     blockhash: tx.blockhash,
                     confirmations: tx.confirmations,
                     vsize: tx.vsize,
@@ -300,6 +343,29 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
                     return;
                 }
                 resolve(info.result);
+            });
+        });
+    }
+
+    parseTransaction(rawTx: string): Promise<BtcTx> {
+        const btcTx = Transaction.fromRaw(Buffer.from(rawTx, "hex"), {
+            allowLegacyWitnessUtxo: true,
+            allowUnknownInputs: true,
+            allowUnknownOutputs: true,
+            disableScriptCheck: true
+        });
+        return Promise.resolve(bitcoinTxToBtcTx(btcTx));
+    }
+
+    isSpent(utxo: string): Promise<boolean> {
+        const [txId, vout] = utxo.split(":");
+        return new Promise<boolean>((resolve, reject) => {
+            this.rpc.getTxOut(txId, parseInt(vout), true, (err, info) => {
+                if(err) {
+                    reject(err);
+                    return;
+                }
+                resolve(info.result==null);
             });
         });
     }

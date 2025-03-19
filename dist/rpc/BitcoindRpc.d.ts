@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { BitcoindBlock } from "./BitcoindBlock";
 import { BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx } from "@atomiqlabs/base";
+import { Buffer } from "buffer";
 export type BitcoindVout = {
     value: number;
     n: number;
@@ -56,4 +57,6 @@ export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     getSyncInfo(): Promise<BtcSyncInfo>;
     sendRawPackage(rawTxs: string[]): Promise<string[]>;
     sendRawTransaction(rawTx: string): Promise<string>;
+    parseTransaction(rawTx: string): Promise<BtcTx>;
+    isSpent(utxo: string): Promise<boolean>;
 }
