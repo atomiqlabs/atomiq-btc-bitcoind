@@ -1,8 +1,8 @@
 import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
 import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
-import * as bitcoin from "bitcoinjs-lib";
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
+import {Transaction} from "@scure/btc-signer";
 
 export type BitcoindVout = {
     value: number,
@@ -174,13 +174,13 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         if(retrievedTx==null) return null;
 
         //Strip witness data
-        const btcTx = bitcoin.Transaction.fromHex(retrievedTx.hex);
-
-        for(let txIn of btcTx.ins) {
-            txIn.witness = []; //Strip witness data
-        }
-
-        const resultHex = btcTx.toHex();
+        const btcTx = Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
+            allowLegacyWitnessUtxo: true,
+            allowUnknownInputs: true,
+            allowUnknownOutputs: true,
+            disableScriptCheck: true
+        });
+        const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
         retrievedTx.vout.forEach(e => {
             e.value = parseInt(e.value.toFixed(8).replace(new RegExp("\\.", 'g'), ""));
@@ -233,11 +233,13 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             hash: block.hash,
             height: block.height,
             tx: block.tx.map(tx => {
-                const btcTx = bitcoin.Transaction.fromHex(tx.hex);
-                for(let txIn of btcTx.ins) {
-                    txIn.witness = []; //Strip witness data
-                }
-                const resultHex = btcTx.toHex();
+                const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
+                    allowLegacyWitnessUtxo: true,
+                    allowUnknownInputs: true,
+                    allowUnknownOutputs: true,
+                    disableScriptCheck: true
+                });
+                const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
 
                 return {
                     blockhash: tx.blockhash,

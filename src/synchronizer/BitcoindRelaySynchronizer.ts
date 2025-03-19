@@ -1,4 +1,3 @@
-
 import {BtcRelay, BtcStoredHeader, RelaySynchronizer} from "@atomiqlabs/base";
 import {BitcoindBlock} from "../rpc/BitcoindBlock";
 import {BitcoindRpc} from "../rpc/BitcoindRpc";
