@@ -93,7 +93,7 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
         confirmations: 0,
         txid: btcTx.id,
         hex: Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
-        raw: Buffer.from(btcTx.toBytes()).toString("hex"),
+        raw: Buffer.from(btcTx.extract()).toString("hex"),
         vsize: btcTx.vsize,
 
         outs: Array.from({length: btcTx.outputsLength}, (_, i) => i).map((index) => {
