@@ -4,6 +4,7 @@ import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base"
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
 import {Script, Transaction} from "@scure/btc-signer";
 import {Buffer} from "buffer";
+import {createHash} from "crypto";
 
 export type BitcoindVout = {
     value: number,
@@ -91,10 +92,14 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
         version: btcTx.version,
         blockhash: null,
         confirmations: 0,
-        txid: btcTx.id,
+        txid: createHash("sha256").update(
+            createHash("sha256").update(
+                btcTx.toBytes(true, false)
+            ).digest()
+        ).digest().reverse().toString("hex"),
         hex: Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
         raw: Buffer.from(btcTx.toBytes(true, true)).toString("hex"),
-        vsize: btcTx.vsize,
+        vsize: btcTx.isFinal ? btcTx.vsize : null,
 
         outs: Array.from({length: btcTx.outputsLength}, (_, i) => i).map((index) => {
             const output = btcTx.getOutput(index);
@@ -117,7 +122,7 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
                     hex: Buffer.from(input.finalScriptSig).toString("hex")
                 },
                 sequence: input.sequence,
-                txinwitness: input.finalScriptWitness.map(witness => Buffer.from(witness).toString("hex"))
+                txinwitness: input.finalScriptWitness==null ? [] : input.finalScriptWitness.map(witness => Buffer.from(witness).toString("hex"))
             }
         })
     }
