@@ -273,5 +273,63 @@ class BitcoindRpc {
             });
         });
     }
+    getFeeRate(btcTx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (btcTx.confirmations > 0)
+                return null;
+            let totalIn = 0;
+            const prevTxs = [];
+            yield Promise.all(btcTx.ins.map((txIn) => __awaiter(this, void 0, void 0, function* () {
+                const prevTx = yield this.getTransaction(txIn.txid);
+                totalIn += prevTx.outs[txIn.vout].value;
+                prevTxs.push(prevTx);
+            })));
+            const txFee = totalIn - btcTx.outs.reduce((previousValue, currentValue) => previousValue + currentValue.value, 0);
+            return {
+                fee: txFee,
+                vsize: btcTx.vsize,
+                getEffectiveFeeRate: (feeData) => __awaiter(this, void 0, void 0, function* () {
+                    feeData !== null && feeData !== void 0 ? feeData : (feeData = { adjustedVsize: btcTx.vsize, adjustedFee: txFee });
+                    const inputFees = [];
+                    for (let prevTx of prevTxs) {
+                        const res = yield this.getFeeRate(prevTx);
+                        if (res != null)
+                            inputFees.push(res);
+                    }
+                    inputFees.sort((a, b) => (a.fee / a.vsize) - (b.fee / b.vsize));
+                    const toAdjust = [];
+                    for (let inputFee of inputFees) {
+                        if (inputFee.fee / inputFee.vsize < feeData.adjustedFee / feeData.adjustedVsize) {
+                            feeData.adjustedFee += inputFee.fee;
+                            feeData.adjustedVsize += inputFee.vsize;
+                            toAdjust.push(inputFee);
+                        }
+                        else {
+                            const obj = { adjustedVsize: inputFee.vsize, adjustedFee: inputFee.fee };
+                            yield inputFee.getEffectiveFeeRate(obj);
+                            if (obj.adjustedFee / obj.adjustedVsize < feeData.adjustedFee / feeData.adjustedVsize) {
+                                feeData.adjustedFee += obj.adjustedFee;
+                                feeData.adjustedVsize += obj.adjustedVsize;
+                            }
+                        }
+                    }
+                    for (let inputFee of toAdjust) {
+                        yield inputFee.getEffectiveFeeRate(feeData);
+                    }
+                    return Object.assign(Object.assign({}, feeData), { feeRate: feeData.adjustedFee / feeData.adjustedVsize });
+                })
+            };
+        });
+    }
+    getEffectiveFeeRate(btcTx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const res = yield (yield this.getFeeRate(btcTx)).getEffectiveFeeRate();
+            return {
+                fee: res.adjustedFee,
+                vsize: res.adjustedVsize,
+                feeRate: res.feeRate
+            };
+        });
+    }
 }
 exports.BitcoindRpc = BitcoindRpc;

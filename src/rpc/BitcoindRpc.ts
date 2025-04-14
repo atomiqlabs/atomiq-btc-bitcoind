@@ -128,6 +128,12 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
     }
 }
 
+type FeeRateResponse = {
+    fee: number,
+    vsize: number,
+    getEffectiveFeeRate: (feeData?: {adjustedVsize: number, adjustedFee: number}) => Promise<{adjustedVsize: number, adjustedFee: number, feeRate: number}>
+}
+
 export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     rpc: any;
@@ -375,4 +381,63 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
     }
 
+    private async getFeeRate(btcTx: BtcTx): Promise<FeeRateResponse> {
+        if(btcTx.confirmations>0) return null;
+
+        let totalIn = 0;
+        const prevTxs: BtcTx[] = [];
+        await Promise.all(btcTx.ins.map(async(txIn) => {
+            const prevTx = await this.getTransaction(txIn.txid);
+            totalIn += prevTx.outs[txIn.vout].value;
+            prevTxs.push(prevTx);
+        }));
+
+        const txFee = totalIn - btcTx.outs.reduce((previousValue,currentValue) => previousValue+currentValue.value, 0);
+
+        return {
+            fee: txFee,
+            vsize: btcTx.vsize,
+            getEffectiveFeeRate: async (feeData?: {adjustedVsize: number, adjustedFee: number}) => {
+                feeData ??= {adjustedVsize: btcTx.vsize, adjustedFee: txFee};
+                const inputFees: FeeRateResponse[] = [];
+                for(let prevTx of prevTxs) {
+                    const res = await this.getFeeRate(prevTx);
+                    if(res!=null) inputFees.push(res);
+                }
+                inputFees.sort((a, b) => (a.fee/a.vsize) - (b.fee/b.vsize));
+                const toAdjust: FeeRateResponse[] = [];
+                for(let inputFee of inputFees) {
+                    if(inputFee.fee/inputFee.vsize < feeData.adjustedFee/feeData.adjustedVsize) {
+                        feeData.adjustedFee += inputFee.fee;
+                        feeData.adjustedVsize += inputFee.vsize;
+
+                        toAdjust.push(inputFee);
+                    } else {
+                        const obj = {adjustedVsize: inputFee.vsize, adjustedFee: inputFee.fee};
+                        await inputFee.getEffectiveFeeRate(obj);
+                        if(obj.adjustedFee/obj.adjustedVsize < feeData.adjustedFee/feeData.adjustedVsize) {
+                            feeData.adjustedFee += obj.adjustedFee;
+                            feeData.adjustedVsize += obj.adjustedVsize;
+                        }
+                    }
+                }
+                for(let inputFee of toAdjust) {
+                    await inputFee.getEffectiveFeeRate(feeData);
+                }
+                return {
+                    ...feeData,
+                    feeRate: feeData.adjustedFee/feeData.adjustedVsize
+                };
+            }
+        };
+    }
+
+    async getEffectiveFeeRate(btcTx: BtcTx) {
+        const res = await (await this.getFeeRate(btcTx)).getEffectiveFeeRate();
+        return {
+            fee: res.adjustedFee,
+            vsize: res.adjustedVsize,
+            feeRate: res.feeRate
+        }
+    }
 }

@@ -59,4 +59,10 @@ export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     sendRawTransaction(rawTx: string): Promise<string>;
     parseTransaction(rawTx: string): Promise<BtcTx>;
     isSpent(utxo: string): Promise<boolean>;
+    private getFeeRate;
+    getEffectiveFeeRate(btcTx: BtcTx): Promise<{
+        fee: number;
+        vsize: number;
+        feeRate: number;
+    }>;
 }
