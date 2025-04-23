@@ -143,7 +143,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         user: string,
         pass: string,
         host: string,
-        port: number
+        port: number,
+        timeout: number = 10*1000
     ) {
         this.rpc = new RpcClient({
             protocol,
@@ -152,6 +153,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             host,
             port: port.toString()
         });
+        this.rpc.httpOptions = new Proxy(
+            { signal: null },
+            {
+                get() {
+                    return AbortSignal.timeout(timeout);
+                },
+            }
+        );
     }
 
     async getTipHeight(): Promise<number> {

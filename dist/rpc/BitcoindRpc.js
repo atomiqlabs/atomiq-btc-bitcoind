@@ -53,13 +53,18 @@ function bitcoinTxToBtcTx(btcTx) {
     };
 }
 class BitcoindRpc {
-    constructor(protocol, user, pass, host, port) {
+    constructor(protocol, user, pass, host, port, timeout = 10 * 1000) {
         this.rpc = new RpcClient({
             protocol,
             user,
             pass,
             host,
             port: port.toString()
+        });
+        this.rpc.httpOptions = new Proxy({ signal: null }, {
+            get() {
+                return AbortSignal.timeout(timeout);
+            },
         });
     }
     getTipHeight() {

@@ -41,7 +41,7 @@ export type BitcoindTransaction = {
 };
 export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     rpc: any;
-    constructor(protocol: string, user: string, pass: string, host: string, port: number);
+    constructor(protocol: string, user: string, pass: string, host: string, port: number, timeout?: number);
     getTipHeight(): Promise<number>;
     getBlockHeader(blockhash: string): Promise<BitcoindBlock>;
     isInMainChain(blockhash: string): Promise<boolean>;
