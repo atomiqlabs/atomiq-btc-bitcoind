@@ -187,13 +187,19 @@ class BitcoindRpc {
                 hash: block.hash,
                 height: block.height,
                 tx: block.tx.map(tx => {
-                    const btcTx = btc_signer_1.Transaction.fromRaw(buffer_1.Buffer.from(tx.hex, "hex"), {
-                        allowLegacyWitnessUtxo: true,
-                        allowUnknownInputs: true,
-                        allowUnknownOutputs: true,
-                        disableScriptCheck: true
-                    });
-                    const resultHex = buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                    let resultHex = tx.hex;
+                    try {
+                        const btcTx = btc_signer_1.Transaction.fromRaw(buffer_1.Buffer.from(tx.hex, "hex"), {
+                            allowLegacyWitnessUtxo: true,
+                            allowUnknownInputs: true,
+                            allowUnknownOutputs: true,
+                            disableScriptCheck: true
+                        });
+                        resultHex = buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                    }
+                    catch (e) {
+                        console.warn("Error parsing transaction " + tx.txid, e);
+                    }
                     return {
                         locktime: tx.locktime,
                         version: tx.version,

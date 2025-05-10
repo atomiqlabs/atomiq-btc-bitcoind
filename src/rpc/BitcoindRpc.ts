@@ -294,13 +294,18 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             hash: block.hash,
             height: block.height,
             tx: block.tx.map(tx => {
-                const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
-                    allowLegacyWitnessUtxo: true,
-                    allowUnknownInputs: true,
-                    allowUnknownOutputs: true,
-                    disableScriptCheck: true
-                });
-                const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                let resultHex = tx.hex;
+                try {
+                    const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
+                        allowLegacyWitnessUtxo: true,
+                        allowUnknownInputs: true,
+                        allowUnknownOutputs: true,
+                        disableScriptCheck: true
+                    });
+                    resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                } catch (e) {
+                    console.warn("Error parsing transaction "+tx.txid, e);
+                }
 
                 return {
                     locktime: tx.locktime,
