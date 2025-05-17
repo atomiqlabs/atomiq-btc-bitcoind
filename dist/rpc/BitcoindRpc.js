@@ -14,14 +14,57 @@ const BitcoindBlock_1 = require("./BitcoindBlock");
 const BTCMerkleTree_1 = require("./BTCMerkleTree");
 const RpcClient = require("@atomiqlabs/bitcoind-rpc");
 const btc_signer_1 = require("@scure/btc-signer");
+const buffer_1 = require("buffer");
+const crypto_1 = require("crypto");
+function bitcoinTxToBtcTx(btcTx) {
+    return {
+        locktime: btcTx.lockTime,
+        version: btcTx.version,
+        blockhash: null,
+        confirmations: 0,
+        txid: (0, crypto_1.createHash)("sha256").update((0, crypto_1.createHash)("sha256").update(btcTx.toBytes(true, false)).digest()).digest().reverse().toString("hex"),
+        hex: buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
+        raw: buffer_1.Buffer.from(btcTx.toBytes(true, true)).toString("hex"),
+        vsize: btcTx.isFinal ? btcTx.vsize : null,
+        outs: Array.from({ length: btcTx.outputsLength }, (_, i) => i).map((index) => {
+            const output = btcTx.getOutput(index);
+            return {
+                value: Number(output.amount),
+                n: index,
+                scriptPubKey: {
+                    asm: btc_signer_1.Script.decode(output.script).map(val => typeof (val) === "object" ? buffer_1.Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: buffer_1.Buffer.from(output.script).toString("hex")
+                }
+            };
+        }),
+        ins: Array.from({ length: btcTx.inputsLength }, (_, i) => i).map(index => {
+            const input = btcTx.getInput(index);
+            return {
+                txid: buffer_1.Buffer.from(input.txid).toString("hex"),
+                vout: input.index,
+                scriptSig: {
+                    asm: btc_signer_1.Script.decode(input.finalScriptSig).map(val => typeof (val) === "object" ? buffer_1.Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: buffer_1.Buffer.from(input.finalScriptSig).toString("hex")
+                },
+                sequence: input.sequence,
+                txinwitness: input.finalScriptWitness == null ? [] : input.finalScriptWitness.map(witness => buffer_1.Buffer.from(witness).toString("hex"))
+            };
+        })
+    };
+}
 class BitcoindRpc {
-    constructor(protocol, user, pass, host, port) {
+    constructor(protocol, user, pass, host, port, timeout = 10 * 1000) {
         this.rpc = new RpcClient({
             protocol,
             user,
             pass,
             host,
             port: port.toString()
+        });
+        this.rpc.httpOptions = new Proxy({ signal: null }, {
+            get() {
+                return AbortSignal.timeout(timeout);
+            },
         });
     }
     getTipHeight() {
@@ -89,17 +132,19 @@ class BitcoindRpc {
             if (retrievedTx == null)
                 return null;
             //Strip witness data
-            const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(retrievedTx.hex, "hex"), {
+            const btcTx = btc_signer_1.Transaction.fromRaw(buffer_1.Buffer.from(retrievedTx.hex, "hex"), {
                 allowLegacyWitnessUtxo: true,
                 allowUnknownInputs: true,
                 allowUnknownOutputs: true,
                 disableScriptCheck: true
             });
-            const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+            const resultHex = buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex");
             retrievedTx.vout.forEach(e => {
                 e.value = parseInt(e.value.toFixed(8).replace(new RegExp("\\.", 'g'), ""));
             });
             return {
+                locktime: retrievedTx.locktime,
+                version: retrievedTx.version,
                 blockhash: retrievedTx.blockhash,
                 confirmations: retrievedTx.confirmations,
                 vsize: retrievedTx.vsize,
@@ -142,14 +187,22 @@ class BitcoindRpc {
                 hash: block.hash,
                 height: block.height,
                 tx: block.tx.map(tx => {
-                    const btcTx = btc_signer_1.Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
-                        allowLegacyWitnessUtxo: true,
-                        allowUnknownInputs: true,
-                        allowUnknownOutputs: true,
-                        disableScriptCheck: true
-                    });
-                    const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                    let resultHex = tx.hex;
+                    try {
+                        const btcTx = btc_signer_1.Transaction.fromRaw(buffer_1.Buffer.from(tx.hex, "hex"), {
+                            allowLegacyWitnessUtxo: true,
+                            allowUnknownInputs: true,
+                            allowUnknownOutputs: true,
+                            disableScriptCheck: true
+                        });
+                        resultHex = buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                    }
+                    catch (e) {
+                        console.warn("Error parsing transaction " + tx.txid, e);
+                    }
                     return {
+                        locktime: tx.locktime,
+                        version: tx.version,
                         blockhash: tx.blockhash,
                         confirmations: tx.confirmations,
                         vsize: tx.vsize,
@@ -208,6 +261,85 @@ class BitcoindRpc {
                 }
                 resolve(info.result);
             });
+        });
+    }
+    parseTransaction(rawTx) {
+        const btcTx = btc_signer_1.Transaction.fromRaw(buffer_1.Buffer.from(rawTx, "hex"), {
+            allowLegacyWitnessUtxo: true,
+            allowUnknownInputs: true,
+            allowUnknownOutputs: true,
+            disableScriptCheck: true
+        });
+        return Promise.resolve(bitcoinTxToBtcTx(btcTx));
+    }
+    isSpent(utxo) {
+        const [txId, vout] = utxo.split(":");
+        return new Promise((resolve, reject) => {
+            this.rpc.getTxOut(txId, parseInt(vout), true, (err, info) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve(info.result == null);
+            });
+        });
+    }
+    getFeeRate(btcTx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (btcTx.confirmations > 0)
+                return null;
+            let totalIn = 0;
+            const prevTxs = [];
+            yield Promise.all(btcTx.ins.map((txIn) => __awaiter(this, void 0, void 0, function* () {
+                const prevTx = yield this.getTransaction(txIn.txid);
+                totalIn += prevTx.outs[txIn.vout].value;
+                prevTxs.push(prevTx);
+            })));
+            const txFee = totalIn - btcTx.outs.reduce((previousValue, currentValue) => previousValue + currentValue.value, 0);
+            return {
+                fee: txFee,
+                vsize: btcTx.vsize,
+                getEffectiveFeeRate: (feeData) => __awaiter(this, void 0, void 0, function* () {
+                    feeData !== null && feeData !== void 0 ? feeData : (feeData = { adjustedVsize: btcTx.vsize, adjustedFee: txFee });
+                    const inputFees = [];
+                    for (let prevTx of prevTxs) {
+                        const res = yield this.getFeeRate(prevTx);
+                        if (res != null)
+                            inputFees.push(res);
+                    }
+                    inputFees.sort((a, b) => (a.fee / a.vsize) - (b.fee / b.vsize));
+                    const toAdjust = [];
+                    for (let inputFee of inputFees) {
+                        if (inputFee.fee / inputFee.vsize < feeData.adjustedFee / feeData.adjustedVsize) {
+                            feeData.adjustedFee += inputFee.fee;
+                            feeData.adjustedVsize += inputFee.vsize;
+                            toAdjust.push(inputFee);
+                        }
+                        else {
+                            const obj = { adjustedVsize: inputFee.vsize, adjustedFee: inputFee.fee };
+                            yield inputFee.getEffectiveFeeRate(obj);
+                            if (obj.adjustedFee / obj.adjustedVsize < feeData.adjustedFee / feeData.adjustedVsize) {
+                                feeData.adjustedFee += obj.adjustedFee;
+                                feeData.adjustedVsize += obj.adjustedVsize;
+                            }
+                        }
+                    }
+                    for (let inputFee of toAdjust) {
+                        yield inputFee.getEffectiveFeeRate(feeData);
+                    }
+                    return Object.assign(Object.assign({}, feeData), { feeRate: feeData.adjustedFee / feeData.adjustedVsize });
+                })
+            };
+        });
+    }
+    getEffectiveFeeRate(btcTx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const res = yield (yield this.getFeeRate(btcTx)).getEffectiveFeeRate();
+            return {
+                fee: res.adjustedFee,
+                vsize: res.adjustedVsize,
+                feeRate: res.feeRate
+            };
         });
     }
 }

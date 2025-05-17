@@ -14,7 +14,8 @@ export declare class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> imp
         blockHeaderMap: {
             [blockheight: number]: BitcoindBlock;
         };
-        btcRelayTipBlockHash: string;
+        btcRelayTipCommitedHeader: V;
+        btcRelayTipBlockHeader: BitcoindBlock;
         latestBlockHeader: BitcoindBlock;
         startForkId: number;
     }>;

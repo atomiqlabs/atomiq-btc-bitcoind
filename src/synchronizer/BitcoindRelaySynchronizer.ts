@@ -17,7 +17,8 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
         targetCommitedHeader: V,
         computedHeaderMap: {[blockheight: number]: V},
         blockHeaderMap: {[blockheight: number]: BitcoindBlock},
-        btcRelayTipBlockHash: string,
+        btcRelayTipCommitedHeader: V,
+        btcRelayTipBlockHeader: BitcoindBlock,
         latestBlockHeader: BitcoindBlock,
         startForkId: number
     }> {
@@ -125,7 +126,8 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
             targetCommitedHeader: cacheData.lastStoredHeader,
             blockHeaderMap,
             computedHeaderMap,
-            btcRelayTipBlockHash,
+            btcRelayTipBlockHeader: resultBitcoinHeader,
+            btcRelayTipCommitedHeader: resultStoredHeader,
 
             latestBlockHeader: spvTipBlockHeader,
             startForkId

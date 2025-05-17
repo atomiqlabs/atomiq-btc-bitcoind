@@ -2,7 +2,9 @@ import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
 import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
-import {Transaction} from "@scure/btc-signer";
+import {Script, Transaction} from "@scure/btc-signer";
+import {Buffer} from "buffer";
+import {createHash} from "crypto";
 
 export type BitcoindVout = {
     value: number,
@@ -84,6 +86,54 @@ type BitcoindBlockchainInfo = {
     warnings : string
 }
 
+function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
+    return {
+        locktime: btcTx.lockTime,
+        version: btcTx.version,
+        blockhash: null,
+        confirmations: 0,
+        txid: createHash("sha256").update(
+            createHash("sha256").update(
+                btcTx.toBytes(true, false)
+            ).digest()
+        ).digest().reverse().toString("hex"),
+        hex: Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
+        raw: Buffer.from(btcTx.toBytes(true, true)).toString("hex"),
+        vsize: btcTx.isFinal ? btcTx.vsize : null,
+
+        outs: Array.from({length: btcTx.outputsLength}, (_, i) => i).map((index) => {
+            const output = btcTx.getOutput(index);
+            return {
+                value: Number(output.amount),
+                n: index,
+                scriptPubKey: {
+                    asm: Script.decode(output.script).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: Buffer.from(output.script).toString("hex")
+                }
+            }
+        }),
+        ins: Array.from({length: btcTx.inputsLength}, (_, i) => i).map(index => {
+            const input = btcTx.getInput(index);
+            return {
+                txid: Buffer.from(input.txid).toString("hex"),
+                vout: input.index,
+                scriptSig: {
+                    asm: Script.decode(input.finalScriptSig).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                    hex: Buffer.from(input.finalScriptSig).toString("hex")
+                },
+                sequence: input.sequence,
+                txinwitness: input.finalScriptWitness==null ? [] : input.finalScriptWitness.map(witness => Buffer.from(witness).toString("hex"))
+            }
+        })
+    }
+}
+
+type FeeRateResponse = {
+    fee: number,
+    vsize: number,
+    getEffectiveFeeRate: (feeData?: {adjustedVsize: number, adjustedFee: number}) => Promise<{adjustedVsize: number, adjustedFee: number, feeRate: number}>
+}
+
 export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     rpc: any;
@@ -93,7 +143,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         user: string,
         pass: string,
         host: string,
-        port: number
+        port: number,
+        timeout: number = 10*1000
     ) {
         this.rpc = new RpcClient({
             protocol,
@@ -102,6 +153,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             host,
             port: port.toString()
         });
+        this.rpc.httpOptions = new Proxy(
+            { signal: null },
+            {
+                get() {
+                    return AbortSignal.timeout(timeout);
+                },
+            }
+        );
     }
 
     async getTipHeight(): Promise<number> {
@@ -187,6 +246,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
 
         return {
+            locktime: retrievedTx.locktime,
+            version: retrievedTx.version,
             blockhash: retrievedTx.blockhash,
             confirmations: retrievedTx.confirmations,
             vsize: retrievedTx.vsize,
@@ -233,15 +294,22 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             hash: block.hash,
             height: block.height,
             tx: block.tx.map(tx => {
-                const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
-                    allowLegacyWitnessUtxo: true,
-                    allowUnknownInputs: true,
-                    allowUnknownOutputs: true,
-                    disableScriptCheck: true
-                });
-                const resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                let resultHex = tx.hex;
+                try {
+                    const btcTx = Transaction.fromRaw(Buffer.from(tx.hex, "hex"), {
+                        allowLegacyWitnessUtxo: true,
+                        allowUnknownInputs: true,
+                        allowUnknownOutputs: true,
+                        disableScriptCheck: true
+                    });
+                    resultHex = Buffer.from(btcTx.toBytes(true, false)).toString("hex");
+                } catch (e) {
+                    console.warn("Error parsing transaction "+tx.txid, e);
+                }
 
                 return {
+                    locktime: tx.locktime,
+                    version: tx.version,
                     blockhash: tx.blockhash,
                     confirmations: tx.confirmations,
                     vsize: tx.vsize,
@@ -304,4 +372,86 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
     }
 
+    parseTransaction(rawTx: string): Promise<BtcTx> {
+        const btcTx = Transaction.fromRaw(Buffer.from(rawTx, "hex"), {
+            allowLegacyWitnessUtxo: true,
+            allowUnknownInputs: true,
+            allowUnknownOutputs: true,
+            disableScriptCheck: true
+        });
+        return Promise.resolve(bitcoinTxToBtcTx(btcTx));
+    }
+
+    isSpent(utxo: string): Promise<boolean> {
+        const [txId, vout] = utxo.split(":");
+        return new Promise<boolean>((resolve, reject) => {
+            this.rpc.getTxOut(txId, parseInt(vout), true, (err, info) => {
+                if(err) {
+                    reject(err);
+                    return;
+                }
+                resolve(info.result==null);
+            });
+        });
+    }
+
+    private async getFeeRate(btcTx: BtcTx): Promise<FeeRateResponse> {
+        if(btcTx.confirmations>0) return null;
+
+        let totalIn = 0;
+        const prevTxs: BtcTx[] = [];
+        await Promise.all(btcTx.ins.map(async(txIn) => {
+            const prevTx = await this.getTransaction(txIn.txid);
+            totalIn += prevTx.outs[txIn.vout].value;
+            prevTxs.push(prevTx);
+        }));
+
+        const txFee = totalIn - btcTx.outs.reduce((previousValue,currentValue) => previousValue+currentValue.value, 0);
+
+        return {
+            fee: txFee,
+            vsize: btcTx.vsize,
+            getEffectiveFeeRate: async (feeData?: {adjustedVsize: number, adjustedFee: number}) => {
+                feeData ??= {adjustedVsize: btcTx.vsize, adjustedFee: txFee};
+                const inputFees: FeeRateResponse[] = [];
+                for(let prevTx of prevTxs) {
+                    const res = await this.getFeeRate(prevTx);
+                    if(res!=null) inputFees.push(res);
+                }
+                inputFees.sort((a, b) => (a.fee/a.vsize) - (b.fee/b.vsize));
+                const toAdjust: FeeRateResponse[] = [];
+                for(let inputFee of inputFees) {
+                    if(inputFee.fee/inputFee.vsize < feeData.adjustedFee/feeData.adjustedVsize) {
+                        feeData.adjustedFee += inputFee.fee;
+                        feeData.adjustedVsize += inputFee.vsize;
+
+                        toAdjust.push(inputFee);
+                    } else {
+                        const obj = {adjustedVsize: inputFee.vsize, adjustedFee: inputFee.fee};
+                        await inputFee.getEffectiveFeeRate(obj);
+                        if(obj.adjustedFee/obj.adjustedVsize < feeData.adjustedFee/feeData.adjustedVsize) {
+                            feeData.adjustedFee += obj.adjustedFee;
+                            feeData.adjustedVsize += obj.adjustedVsize;
+                        }
+                    }
+                }
+                for(let inputFee of toAdjust) {
+                    await inputFee.getEffectiveFeeRate(feeData);
+                }
+                return {
+                    ...feeData,
+                    feeRate: feeData.adjustedFee/feeData.adjustedVsize
+                };
+            }
+        };
+    }
+
+    async getEffectiveFeeRate(btcTx: BtcTx) {
+        const res = await (await this.getFeeRate(btcTx)).getEffectiveFeeRate();
+        return {
+            fee: res.adjustedFee,
+            vsize: res.adjustedVsize,
+            feeRate: res.feeRate
+        }
+    }
 }

@@ -100,7 +100,8 @@ class BtcRelaySynchronizer {
                 targetCommitedHeader: cacheData.lastStoredHeader,
                 blockHeaderMap,
                 computedHeaderMap,
-                btcRelayTipBlockHash,
+                btcRelayTipBlockHeader: resultBitcoinHeader,
+                btcRelayTipCommitedHeader: resultStoredHeader,
                 latestBlockHeader: spvTipBlockHeader,
                 startForkId
             };
