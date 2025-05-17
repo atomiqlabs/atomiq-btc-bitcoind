@@ -1,6 +1,6 @@
 {
   "name": "@atomiqlabs/btc-bitcoind",
-  "version": "7.0.0-beta.3",
+  "version": "7.0.0",
   "description": "Connector and synchronizer using bitcoind for bitcoin relay",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",
@@ -22,7 +22,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": "^9.0.0-beta.1",
+    "@atomiqlabs/base": "^9.0.0",
     "@atomiqlabs/bitcoind-rpc": "0.9.0",
     "@scure/btc-signer": "1.6.0"
   },
