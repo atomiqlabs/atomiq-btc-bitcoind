@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BTCMerkleTree = void 0;
 const crypto_1 = require("crypto");
+const blockCache = new Map();
 class BTCMerkleTree {
     static dblSha256(buffer) {
         return (0, crypto_1.createHash)("sha256").update((0, crypto_1.createHash)("sha256").update(buffer).digest()).digest();
@@ -38,15 +39,19 @@ class BTCMerkleTree {
     }
     static getTransactionMerkle(txId, blockhash, btcRpc) {
         return __awaiter(this, void 0, void 0, function* () {
-            const block = yield new Promise((resolve, reject) => {
-                btcRpc.getBlock(blockhash, 1, (err, res) => {
-                    if (err || res.error) {
-                        reject(err || res.error);
-                        return;
-                    }
-                    resolve(res.result);
+            let block = blockCache.get(blockhash);
+            if (block == null) {
+                block = yield new Promise((resolve, reject) => {
+                    btcRpc.getBlock(blockhash, 1, (err, res) => {
+                        if (err || res.error) {
+                            reject(err || res.error);
+                            return;
+                        }
+                        resolve(res.result);
+                    });
                 });
-            });
+                blockCache.set(blockhash, block);
+            }
             const position = block.tx.indexOf(txId);
             const txIds = block.tx.map(e => Buffer.from(e, "hex").reverse());
             const reversedMerkleRoot = Buffer.from(block.merkleroot, "hex").reverse();
