@@ -1,5 +1,7 @@
 import {createHash} from "crypto";
 
+const blockCache: Map<string, any> = new Map();
+
 export class BTCMerkleTree {
 
     static dblSha256(buffer: Buffer): Buffer {
@@ -38,15 +40,19 @@ export class BTCMerkleTree {
         merkle: Buffer[],
         blockheight: number
     }> {
-        const block = await new Promise<any>((resolve, reject) => {
-            btcRpc.getBlock(blockhash, 1, (err, res) => {
-                if(err || res.error) {
-                    reject(err || res.error);
-                    return;
-                }
-                resolve(res.result);
-            })
-        });
+        let block = blockCache.get(blockhash);
+        if(block==null) {
+            block = await new Promise<any>((resolve, reject) => {
+                btcRpc.getBlock(blockhash, 1, (err, res) => {
+                    if(err || res.error) {
+                        reject(err || res.error);
+                        return;
+                    }
+                    resolve(res.result);
+                })
+            });
+            blockCache.set(blockhash, block);
+        }
 
         const position = block.tx.indexOf(txId);
         const txIds = block.tx.map(e => Buffer.from(e, "hex").reverse());
