@@ -24,32 +24,25 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
     }> {
         const tipData = await this.btcRelay.getTipData();
 
+        const {resultStoredHeader, resultBitcoinHeader} = await this.btcRelay.retrieveLatestKnownBlockLog();
         let cacheData: {
             forkId: number,
             lastStoredHeader: V,
-            tx: T,
-            computedCommitedHeaders: V[]
+            tx?: T,
+            computedCommitedHeaders?: V[]
         } = {
             forkId: 0,
-            lastStoredHeader: null,
-            tx: null,
-            computedCommitedHeaders: null
+            lastStoredHeader: resultStoredHeader
         };
 
-        let startForkId = null;
-
-        const {resultStoredHeader, resultBitcoinHeader} = await this.btcRelay.retrieveLatestKnownBlockLog();
-        cacheData.lastStoredHeader = resultStoredHeader;
+        let startForkId: number = 0;
         if(resultStoredHeader.getBlockheight()<tipData.blockheight) {
             cacheData.forkId = -1; //Indicate that we will be submitting blocks to fork
         }
         let spvTipBlockHeader: BitcoindBlock = resultBitcoinHeader;
-        const btcRelayTipBlockHash: string = resultBitcoinHeader.hash;
 
         console.log("[BtcRelaySynchronizer]: Retrieved stored header with commitment: ", cacheData.lastStoredHeader);
-
         console.log("[BtcRelaySynchronizer]: SPV tip commit hash: ", tipData.commitHash);
-
         console.log("[BtcRelaySynchronizer]: SPV tip header: ", spvTipBlockHeader);
 
         const txsList: T[] = [];
@@ -83,8 +76,8 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
                 cacheData = await this.btcRelay.saveForkHeaders(signer, headerCache, cacheData.lastStoredHeader, cacheData.forkId, tipData.chainWork, forkFee);
             }
             if(cacheData.forkId!==-1 && cacheData.forkId!==0) startForkId = cacheData.forkId;
-            txsList.push(cacheData.tx);
-            for(let storedHeader of cacheData.computedCommitedHeaders) {
+            if(cacheData.tx!=null) txsList.push(cacheData.tx);
+            if(cacheData.computedCommitedHeaders!=null) for(let storedHeader of cacheData.computedCommitedHeaders) {
                 computedHeaderMap[storedHeader.getBlockheight()] = storedHeader;
             }
         };
@@ -95,6 +88,7 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
             const startTime = Date.now();
 
             const retrievedHeader = await this.bitcoinRpc.getBlockHeader(spvTipBlockHeader.nextblockhash);
+            if(retrievedHeader==null) throw new Error(`Blockheader ${spvTipBlockHeader.nextblockhash} not found`);
 
             console.log("[BtcRelaySynchronizer]: Syncing blockheight (in "+(Date.now()-startTime)+"ms): ", retrievedHeader.height);
 

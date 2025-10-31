@@ -43,17 +43,17 @@ export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     rpc: any;
     constructor(protocol: string, user: string, pass: string, host: string, port: number, timeout?: number);
     getTipHeight(): Promise<number>;
-    getBlockHeader(blockhash: string): Promise<BitcoindBlock>;
+    getBlockHeader(blockhash: string): Promise<BitcoindBlock | null>;
     isInMainChain(blockhash: string): Promise<boolean>;
     getMerkleProof(txId: string, blockhash: string): Promise<{
         reversedTxId: Buffer;
         pos: number;
         merkle: Buffer[];
         blockheight: number;
-    }>;
-    getTransaction(txId: string): Promise<BtcTx>;
-    getBlockhash(height: number): Promise<string>;
-    getBlockWithTransactions(blockhash: string): Promise<BtcBlockWithTxs>;
+    } | null>;
+    getTransaction(txId: string): Promise<BtcTx | null>;
+    getBlockhash(height: number): Promise<string | null>;
+    getBlockWithTransactions(blockhash: string): Promise<BtcBlockWithTxs | null>;
     getSyncInfo(): Promise<BtcSyncInfo>;
     sendRawPackage(rawTxs: string[]): Promise<string[]>;
     sendRawTransaction(rawTx: string): Promise<string>;

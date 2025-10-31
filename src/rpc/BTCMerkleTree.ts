@@ -1,6 +1,27 @@
 import {createHash} from "crypto";
 
-const blockCache: Map<string, any> = new Map();
+type BitcoindRawBlockTxDetails1 = {
+    hash: string,
+    confirmations: number,
+    size: number,
+    strippedsize: number,
+    weight: number,
+    height: number,
+    version: number,
+    versionHex: string,
+    merkleroot: string,
+    tx: string[],
+    time: number,
+    mediantime: number,
+    nonce: number,
+    bits: string,
+    difficulty: number,
+    nTx: number,
+    previousblockhash: string,
+    nextblockhash: string
+}
+
+const blockCache: Map<string, BitcoindRawBlockTxDetails1> = new Map();
 
 export class BTCMerkleTree {
 
@@ -39,11 +60,11 @@ export class BTCMerkleTree {
         pos: number,
         merkle: Buffer[],
         blockheight: number
-    }> {
+    } | null> {
         let block = blockCache.get(blockhash);
         if(block==null) {
-            block = await new Promise<any>((resolve, reject) => {
-                btcRpc.getBlock(blockhash, 1, (err, res) => {
+            block = await new Promise<BitcoindRawBlockTxDetails1>((resolve, reject) => {
+                btcRpc.getBlock(blockhash, 1, (err: any, res: { error: any; result: BitcoindRawBlockTxDetails1; }) => {
                     if(err || res.error) {
                         reject(err || res.error);
                         return;
@@ -55,6 +76,7 @@ export class BTCMerkleTree {
         }
 
         const position = block.tx.indexOf(txId);
+        if(position===-1) return null;
         const txIds = block.tx.map(e => Buffer.from(e, "hex").reverse());
 
         const reversedMerkleRoot = Buffer.from(block.merkleroot, "hex").reverse();
