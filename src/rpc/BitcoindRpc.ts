@@ -1,6 +1,7 @@
 import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
 import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
+// @ts-ignore
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
 import {Script, Transaction} from "@scure/btc-signer";
 import {Buffer} from "buffer";
@@ -86,11 +87,20 @@ type BitcoindBlockchainInfo = {
     warnings : string
 }
 
+type BitcoindRawPackageResponse = {
+    package_msg: string,
+    "tx-results": {
+        [wtxid: string]: {
+            txid: string,
+            error?: any
+        }
+    }
+};
+
 function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
     return {
         locktime: btcTx.lockTime,
         version: btcTx.version,
-        blockhash: null,
         confirmations: 0,
         txid: createHash("sha256").update(
             createHash("sha256").update(
@@ -99,15 +109,17 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
         ).digest().reverse().toString("hex"),
         hex: Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
         raw: Buffer.from(btcTx.toBytes(true, true)).toString("hex"),
-        vsize: btcTx.isFinal ? btcTx.vsize : null,
+        vsize: btcTx.isFinal ? btcTx.vsize : Infinity,
 
         outs: Array.from({length: btcTx.outputsLength}, (_, i) => i).map((index) => {
             const output = btcTx.getOutput(index);
             return {
-                value: Number(output.amount),
+                value: Number(output.amount ?? 0),
                 n: index,
-                scriptPubKey: {
-                    asm: Script.decode(output.script).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                scriptPubKey: output.script==null ? {asm: "", hex: ""} : {
+                    asm: Script.decode(output.script).map(val =>
+                        typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()
+                    ).join(" "),
                     hex: Buffer.from(output.script).toString("hex")
                 }
             }
@@ -115,13 +127,15 @@ function bitcoinTxToBtcTx(btcTx: Transaction): BtcTx {
         ins: Array.from({length: btcTx.inputsLength}, (_, i) => i).map(index => {
             const input = btcTx.getInput(index);
             return {
-                txid: Buffer.from(input.txid).toString("hex"),
-                vout: input.index,
-                scriptSig: {
-                    asm: Script.decode(input.finalScriptSig).map(val => typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()).join(" "),
+                txid: input.txid==null ? "" : Buffer.from(input.txid).toString("hex"),
+                vout: input.index ?? 0,
+                scriptSig: input.finalScriptSig==null ? {asm: "", hex: ""} : {
+                    asm: Script.decode(input.finalScriptSig).map(val =>
+                        typeof(val)==="object" ? Buffer.from(val).toString("hex") : val.toString()
+                    ).join(" "),
                     hex: Buffer.from(input.finalScriptSig).toString("hex")
                 },
-                sequence: input.sequence,
+                sequence: input.sequence ?? 0,
                 txinwitness: input.finalScriptWitness==null ? [] : input.finalScriptWitness.map(witness => Buffer.from(witness).toString("hex"))
             }
         })
@@ -166,7 +180,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     async getTipHeight(): Promise<number> {
 
         const retrievedInfo = await new Promise<BitcoindBlockchainInfo>((resolve, reject) => {
-            this.rpc.getBlockchainInfo((err, info) => {
+            this.rpc.getBlockchainInfo((err: any, info: {result: BitcoindBlockchainInfo}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -179,22 +193,26 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     }
 
-    async getBlockHeader(blockhash: string): Promise<BitcoindBlock> {
-        const retrievedHeader = await new Promise<BitcoindBlockType>((resolve, reject) => {
-            this.rpc.getBlockHeader(blockhash, true, (err, info) => {
+    async getBlockHeader(blockhash: string): Promise<BitcoindBlock | null> {
+        const retrievedHeader = await new Promise<BitcoindBlockType | null>((resolve, reject) => {
+            this.rpc.getBlockHeader(blockhash, true, (err: any & {code: number}, info: {result: BitcoindBlockType}) => {
                 if(err) {
+                    if(err.code===-5) {
+                        resolve(null);
+                        return;
+                    }
                     reject(err);
                     return;
                 }
                 resolve(info.result);
             });
         });
-        return new BitcoindBlock(retrievedHeader);
+        return retrievedHeader==null ? null : new BitcoindBlock(retrievedHeader);
     }
 
     async isInMainChain(blockhash: string): Promise<boolean> {
         const retrievedHeader = await new Promise<BitcoindBlockType>((resolve, reject) => {
-            this.rpc.getBlockHeader(blockhash, true, (err, info) => {
+            this.rpc.getBlockHeader(blockhash, true, (err: any, info: {result: BitcoindBlockType}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -210,14 +228,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         pos: number,
         merkle: Buffer[],
         blockheight: number
-    }> {
+    } | null> {
         return BTCMerkleTree.getTransactionMerkle(txId, blockhash, this.rpc);
     }
 
-    async getTransaction(txId: string): Promise<BtcTx> {
+    async getTransaction(txId: string): Promise<BtcTx | null> {
 
-        const retrievedTx = await new Promise<BitcoindTransaction>((resolve, reject) => {
-            this.rpc.getRawTransaction(txId, 1, (err, info) => {
+        const retrievedTx = await new Promise<BitcoindTransaction | null>((resolve, reject) => {
+            this.rpc.getRawTransaction(txId, 1, (err: any & {code: number}, info: { result: BitcoindTransaction }) => {
                 if(err) {
                     if(err.code===-5) {
                         resolve(null);
@@ -260,10 +278,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     }
 
-    getBlockhash(height: number): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
-            this.rpc.getBlockHash(height, (err, info) => {
+    getBlockhash(height: number): Promise<string | null> {
+        return new Promise<string | null>((resolve, reject) => {
+            this.rpc.getBlockHash(height, (err: any & {code: number}, info: {result: string}) => {
                 if(err) {
+                    if(err.code===-8) {
+                        resolve(null);
+                        return;
+                    }
                     reject(err);
                     return;
                 }
@@ -272,17 +294,21 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
     }
 
-    async getBlockWithTransactions(blockhash: string): Promise<BtcBlockWithTxs> {
-
-        const block = await new Promise<BitcoindRawBlock>((resolve, reject) => {
-            this.rpc.getBlock(blockhash, 2, (err, info) => {
+    async getBlockWithTransactions(blockhash: string): Promise<BtcBlockWithTxs | null> {
+        const block = await new Promise<BitcoindRawBlock | null>((resolve, reject) => {
+            this.rpc.getBlock(blockhash, 2, (err: any & {code: number}, info: {result: BitcoindRawBlock}) => {
                 if(err) {
+                    if(err.code===-5) {
+                        resolve(null);
+                        return;
+                    }
                     reject(err);
                     return;
                 }
                 resolve(info.result);
             });
         });
+        if(block==null) return null;
 
         block.tx.forEach(tx => {
             tx.vout.forEach(vout => {
@@ -326,7 +352,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     async getSyncInfo(): Promise<BtcSyncInfo> {
         const blockchainInfo = await new Promise<BitcoindBlockchainInfo>((resolve, reject) => {
-            this.rpc.getBlockchainInfo((err, info) => {
+            this.rpc.getBlockchainInfo((err: any, info: {result: BitcoindBlockchainInfo}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -345,8 +371,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     }
 
     async sendRawPackage(rawTxs: string[]): Promise<string[]> {
-        const result = await new Promise<{package_msg: string, tx_results: {[wtxid: string]: {txid: string}}}>((resolve, reject) => {
-            this.rpc.submitPackage(rawTxs, (err, info) => {
+        const result = await new Promise<BitcoindRawPackageResponse>((resolve, reject) => {
+            this.rpc.submitPackage(rawTxs, (err: any, info: {result: BitcoindRawPackageResponse}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -355,14 +381,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             });
         });
         if(result.package_msg!=="success") throw new Error(
-            result.package_msg+": "+Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid+"=\""+result["tx-results"][wtxid].error+"\"").join(", ")
+            result.package_msg+": "+Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid+"=\""+result["tx-results"][wtxid].error.toString()+"\"").join(", ")
         );
         return Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid);
     }
 
     sendRawTransaction(rawTx: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
-            this.rpc.sendRawTransaction(rawTx, (err, info) => {
+            this.rpc.sendRawTransaction(rawTx, (err: any, info: {result: string}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -385,7 +411,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     isSpent(utxo: string): Promise<boolean> {
         const [txId, vout] = utxo.split(":");
         return new Promise<boolean>((resolve, reject) => {
-            this.rpc.getTxOut(txId, parseInt(vout), true, (err, info) => {
+            this.rpc.getTxOut(txId, parseInt(vout), true, (err: any, info: {result: boolean}) => {
                 if(err) {
                     reject(err);
                     return;
@@ -395,13 +421,14 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         });
     }
 
-    private async getFeeRate(btcTx: BtcTx): Promise<FeeRateResponse> {
-        if(btcTx.confirmations>0) return null;
+    private async getFeeRate(btcTx: BtcTx): Promise<FeeRateResponse | null> {
+        if(btcTx.confirmations!=null && btcTx.confirmations>0) return null;
 
         let totalIn = 0;
         const prevTxs: BtcTx[] = [];
         await Promise.all(btcTx.ins.map(async(txIn) => {
             const prevTx = await this.getTransaction(txIn.txid);
+            if(prevTx==null) throw new Error(`Cannot find previous tx: ${txIn.txid}`);
             totalIn += prevTx.outs[txIn.vout].value;
             prevTxs.push(prevTx);
         }));
@@ -447,7 +474,9 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     }
 
     async getEffectiveFeeRate(btcTx: BtcTx) {
-        const res = await (await this.getFeeRate(btcTx)).getEffectiveFeeRate();
+        const feeRateResult = await this.getFeeRate(btcTx);
+        if(feeRateResult==null) throw new Error("Cannot fetch effective fee rate, transaction probably already confirmed!");
+        const res = await feeRateResult.getEffectiveFeeRate();
         return {
             fee: res.adjustedFee,
             vsize: res.adjustedVsize,

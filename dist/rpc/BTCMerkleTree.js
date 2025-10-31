@@ -53,6 +53,8 @@ class BTCMerkleTree {
                 blockCache.set(blockhash, block);
             }
             const position = block.tx.indexOf(txId);
+            if (position === -1)
+                return null;
             const txIds = block.tx.map(e => Buffer.from(e, "hex").reverse());
             const reversedMerkleRoot = Buffer.from(block.merkleroot, "hex").reverse();
             const proof = [];

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BitcoindRpc = void 0;
 const BitcoindBlock_1 = require("./BitcoindBlock");
 const BTCMerkleTree_1 = require("./BTCMerkleTree");
+// @ts-ignore
 const RpcClient = require("@atomiqlabs/bitcoind-rpc");
 const btc_signer_1 = require("@scure/btc-signer");
 const buffer_1 = require("buffer");
@@ -20,33 +21,34 @@ function bitcoinTxToBtcTx(btcTx) {
     return {
         locktime: btcTx.lockTime,
         version: btcTx.version,
-        blockhash: null,
         confirmations: 0,
         txid: (0, crypto_1.createHash)("sha256").update((0, crypto_1.createHash)("sha256").update(btcTx.toBytes(true, false)).digest()).digest().reverse().toString("hex"),
         hex: buffer_1.Buffer.from(btcTx.toBytes(true, false)).toString("hex"),
         raw: buffer_1.Buffer.from(btcTx.toBytes(true, true)).toString("hex"),
-        vsize: btcTx.isFinal ? btcTx.vsize : null,
+        vsize: btcTx.isFinal ? btcTx.vsize : Infinity,
         outs: Array.from({ length: btcTx.outputsLength }, (_, i) => i).map((index) => {
+            var _a;
             const output = btcTx.getOutput(index);
             return {
-                value: Number(output.amount),
+                value: Number((_a = output.amount) !== null && _a !== void 0 ? _a : 0),
                 n: index,
-                scriptPubKey: {
+                scriptPubKey: output.script == null ? { asm: "", hex: "" } : {
                     asm: btc_signer_1.Script.decode(output.script).map(val => typeof (val) === "object" ? buffer_1.Buffer.from(val).toString("hex") : val.toString()).join(" "),
                     hex: buffer_1.Buffer.from(output.script).toString("hex")
                 }
             };
         }),
         ins: Array.from({ length: btcTx.inputsLength }, (_, i) => i).map(index => {
+            var _a, _b;
             const input = btcTx.getInput(index);
             return {
-                txid: buffer_1.Buffer.from(input.txid).toString("hex"),
-                vout: input.index,
-                scriptSig: {
+                txid: input.txid == null ? "" : buffer_1.Buffer.from(input.txid).toString("hex"),
+                vout: (_a = input.index) !== null && _a !== void 0 ? _a : 0,
+                scriptSig: input.finalScriptSig == null ? { asm: "", hex: "" } : {
                     asm: btc_signer_1.Script.decode(input.finalScriptSig).map(val => typeof (val) === "object" ? buffer_1.Buffer.from(val).toString("hex") : val.toString()).join(" "),
                     hex: buffer_1.Buffer.from(input.finalScriptSig).toString("hex")
                 },
-                sequence: input.sequence,
+                sequence: (_b = input.sequence) !== null && _b !== void 0 ? _b : 0,
                 txinwitness: input.finalScriptWitness == null ? [] : input.finalScriptWitness.map(witness => buffer_1.Buffer.from(witness).toString("hex"))
             };
         })
@@ -86,13 +88,17 @@ class BitcoindRpc {
             const retrievedHeader = yield new Promise((resolve, reject) => {
                 this.rpc.getBlockHeader(blockhash, true, (err, info) => {
                     if (err) {
+                        if (err.code === -5) {
+                            resolve(null);
+                            return;
+                        }
                         reject(err);
                         return;
                     }
                     resolve(info.result);
                 });
             });
-            return new BitcoindBlock_1.BitcoindBlock(retrievedHeader);
+            return retrievedHeader == null ? null : new BitcoindBlock_1.BitcoindBlock(retrievedHeader);
         });
     }
     isInMainChain(blockhash) {
@@ -160,6 +166,10 @@ class BitcoindRpc {
         return new Promise((resolve, reject) => {
             this.rpc.getBlockHash(height, (err, info) => {
                 if (err) {
+                    if (err.code === -8) {
+                        resolve(null);
+                        return;
+                    }
                     reject(err);
                     return;
                 }
@@ -172,12 +182,18 @@ class BitcoindRpc {
             const block = yield new Promise((resolve, reject) => {
                 this.rpc.getBlock(blockhash, 2, (err, info) => {
                     if (err) {
+                        if (err.code === -5) {
+                            resolve(null);
+                            return;
+                        }
                         reject(err);
                         return;
                     }
                     resolve(info.result);
                 });
             });
+            if (block == null)
+                return null;
             block.tx.forEach(tx => {
                 tx.vout.forEach(vout => {
                     vout.value = parseInt(vout.value.toFixed(8).replace(new RegExp("\\.", 'g'), ""));
@@ -248,7 +264,7 @@ class BitcoindRpc {
                 });
             });
             if (result.package_msg !== "success")
-                throw new Error(result.package_msg + ": " + Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid + "=\"" + result["tx-results"][wtxid].error + "\"").join(", "));
+                throw new Error(result.package_msg + ": " + Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid + "=\"" + result["tx-results"][wtxid].error.toString() + "\"").join(", "));
             return Object.keys(result["tx-results"]).map(wtxid => result["tx-results"][wtxid].txid);
         });
     }
@@ -286,12 +302,14 @@ class BitcoindRpc {
     }
     getFeeRate(btcTx) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (btcTx.confirmations > 0)
+            if (btcTx.confirmations != null && btcTx.confirmations > 0)
                 return null;
             let totalIn = 0;
             const prevTxs = [];
             yield Promise.all(btcTx.ins.map((txIn) => __awaiter(this, void 0, void 0, function* () {
                 const prevTx = yield this.getTransaction(txIn.txid);
+                if (prevTx == null)
+                    throw new Error(`Cannot find previous tx: ${txIn.txid}`);
                 totalIn += prevTx.outs[txIn.vout].value;
                 prevTxs.push(prevTx);
             })));
@@ -334,7 +352,10 @@ class BitcoindRpc {
     }
     getEffectiveFeeRate(btcTx) {
         return __awaiter(this, void 0, void 0, function* () {
-            const res = yield (yield this.getFeeRate(btcTx)).getEffectiveFeeRate();
+            const feeRateResult = yield this.getFeeRate(btcTx);
+            if (feeRateResult == null)
+                throw new Error("Cannot fetch effective fee rate, transaction probably already confirmed!");
+            const res = yield feeRateResult.getEffectiveFeeRate();
             return {
                 fee: res.adjustedFee,
                 vsize: res.adjustedVsize,

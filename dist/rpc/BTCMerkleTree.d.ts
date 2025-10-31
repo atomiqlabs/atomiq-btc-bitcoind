@@ -8,5 +8,5 @@ export declare class BTCMerkleTree {
         pos: number;
         merkle: Buffer[];
         blockheight: number;
-    }>;
+    } | null>;
 }
