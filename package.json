@@ -22,7 +22,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": "github:atomiqlabs/atomiq-base#develop",
+    "@atomiqlabs/base": "^13.0.4",
     "@atomiqlabs/bitcoind-rpc": "0.9.1",
     "@scure/btc-signer": "1.6.0"
   },
