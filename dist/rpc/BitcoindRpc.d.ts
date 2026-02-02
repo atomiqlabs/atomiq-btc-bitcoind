@@ -1,4 +1,5 @@
 /// <reference types="node" />
+/// <reference types="node" />
 import { BitcoindBlock } from "./BitcoindBlock";
 import { BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx } from "@atomiqlabs/base";
 import { Buffer } from "buffer";

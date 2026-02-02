@@ -1,4 +1,5 @@
 /// <reference types="node" />
+/// <reference types="node" />
 import { BtcBlock } from "@atomiqlabs/base";
 export type BitcoindBlockType = {
     hash: string;

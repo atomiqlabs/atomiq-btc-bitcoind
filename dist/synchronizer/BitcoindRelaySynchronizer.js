@@ -18,7 +18,12 @@ class BtcRelaySynchronizer {
     syncToLatestTxs(signer) {
         return __awaiter(this, void 0, void 0, function* () {
             const tipData = yield this.btcRelay.getTipData();
-            const { resultStoredHeader, resultBitcoinHeader } = yield this.btcRelay.retrieveLatestKnownBlockLog();
+            if (tipData == null)
+                throw new Error("BTC Relay on-chain tip data cannot be retrieved (relay not initiated?)");
+            const res = yield this.btcRelay.retrieveLatestKnownBlockLog();
+            if (res == null)
+                throw new Error("Cannot find latest known block header in the relay!");
+            const { resultStoredHeader, resultBitcoinHeader } = res;
             let cacheData = {
                 forkId: 0,
                 lastStoredHeader: resultStoredHeader

@@ -23,8 +23,12 @@ export class BtcRelaySynchronizer<V extends BtcStoredHeader<any>, T> implements 
         startForkId: number
     }> {
         const tipData = await this.btcRelay.getTipData();
+        if(tipData==null) throw new Error("BTC Relay on-chain tip data cannot be retrieved (relay not initiated?)");
 
-        const {resultStoredHeader, resultBitcoinHeader} = await this.btcRelay.retrieveLatestKnownBlockLog();
+        const res = await this.btcRelay.retrieveLatestKnownBlockLog();
+        if(res==null) throw new Error("Cannot find latest known block header in the relay!");
+        const {resultStoredHeader, resultBitcoinHeader} = res;
+
         let cacheData: {
             forkId: number,
             lastStoredHeader: V,

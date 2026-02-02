@@ -7,7 +7,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build:ts4": "npx -p typescript@4.9 tsc --noEmit",
-    "build:ts5": "npx -p typescript@5.3 tsc --noEmit"
+    "build:ts5": "npx -p typescript@5.9 tsc --noEmit"
   },
   "files": [
     "/dist",
@@ -29,7 +29,7 @@
     "@scure/btc-signer": "1.6.0"
   },
   "devDependencies": {
-    "@types/node": "18.18.3",
+    "@types/node": "^22.19.7",
     "typescript": ">=4"
   }
 }

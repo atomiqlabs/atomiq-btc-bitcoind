@@ -1,4 +1,5 @@
 /// <reference types="node" />
+/// <reference types="node" />
 export declare class BTCMerkleTree {
     static dblSha256(buffer: Buffer): Buffer;
     static calcTreeWidth(height: number, nTxs: number): number;
