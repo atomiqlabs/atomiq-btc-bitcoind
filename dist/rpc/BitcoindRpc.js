@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BitcoindRpc = void 0;
 const BitcoindBlock_1 = require("./BitcoindBlock");
 const BTCMerkleTree_1 = require("./BTCMerkleTree");
+const base_1 = require("@atomiqlabs/base");
 // @ts-ignore
 const RpcClient = require("@atomiqlabs/bitcoind-rpc");
 const btc_signer_1 = require("@scure/btc-signer");
@@ -55,7 +56,7 @@ function bitcoinTxToBtcTx(btcTx) {
     };
 }
 class BitcoindRpc {
-    constructor(protocol, user, pass, host, port, timeout = 10 * 1000) {
+    constructor(protocol, user, pass, host, port, timeout = 10 * 1000, network = base_1.BitcoinNetwork.MAINNET) {
         this.rpc = new RpcClient({
             protocol,
             user,
@@ -63,6 +64,7 @@ class BitcoindRpc {
             host,
             port: port.toString()
         });
+        this.network = network;
         this.rpc.httpOptions = new Proxy({ signal: null }, {
             get() {
                 return AbortSignal.timeout(timeout);
@@ -362,6 +364,22 @@ class BitcoindRpc {
                 feeRate: res.feeRate
             };
         });
+    }
+    /**
+     * @inheritDoc
+     */
+    outputScriptToAddress(outputScriptHex) {
+        let network;
+        if (this.network === base_1.BitcoinNetwork.MAINNET) {
+            network = btc_signer_1.NETWORK;
+        }
+        else if (this.network === base_1.BitcoinNetwork.REGTEST) {
+            network = Object.assign(Object.assign({}, btc_signer_1.TEST_NETWORK), { bech32: "bcrt" });
+        }
+        else {
+            network = btc_signer_1.TEST_NETWORK;
+        }
+        return Promise.resolve((0, btc_signer_1.Address)(network).encode(btc_signer_1.OutScript.decode(buffer_1.Buffer.from(outputScriptHex, "hex"))));
     }
 }
 exports.BitcoindRpc = BitcoindRpc;

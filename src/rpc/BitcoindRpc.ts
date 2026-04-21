@@ -1,11 +1,12 @@
 import {BitcoindBlock, BitcoindBlockType} from "./BitcoindBlock";
 import {BTCMerkleTree} from "./BTCMerkleTree";
-import {BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
+import {BitcoinNetwork, BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx} from "@atomiqlabs/base";
 // @ts-ignore
 import * as RpcClient from "@atomiqlabs/bitcoind-rpc";
-import {Script, Transaction} from "@scure/btc-signer";
+import {Address, NETWORK, OutScript, Script, TEST_NETWORK, Transaction} from "@scure/btc-signer";
 import {Buffer} from "buffer";
 import {createHash} from "crypto";
+import {BTC_NETWORK} from "@scure/btc-signer/utils";
 
 export type BitcoindVout = {
     value: number,
@@ -151,6 +152,7 @@ type FeeRateResponse = {
 export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
 
     rpc: any;
+    network: BitcoinNetwork;
 
     constructor(
         protocol: string,
@@ -158,7 +160,8 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         pass: string,
         host: string,
         port: number,
-        timeout: number = 10*1000
+        timeout: number = 10*1000,
+        network: BitcoinNetwork = BitcoinNetwork.MAINNET
     ) {
         this.rpc = new RpcClient({
             protocol,
@@ -167,6 +170,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             host,
             port: port.toString()
         });
+        this.network = network;
         this.rpc.httpOptions = new Proxy(
             { signal: null },
             {
@@ -483,4 +487,23 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             feeRate: res.feeRate
         }
     }
+
+    /**
+     * @inheritDoc
+     */
+    outputScriptToAddress(outputScriptHex: string): Promise<string> {
+        let network: BTC_NETWORK;
+        if(this.network===BitcoinNetwork.MAINNET) {
+            network = NETWORK;
+        } else if(this.network===BitcoinNetwork.REGTEST) {
+            network = {
+                ...TEST_NETWORK,
+                bech32: "bcrt"
+            };
+        } else {
+            network = TEST_NETWORK;
+        }
+        return Promise.resolve(Address(network).encode(OutScript.decode(Buffer.from(outputScriptHex, "hex"))));
+    }
+
 }

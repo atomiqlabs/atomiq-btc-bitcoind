@@ -1,7 +1,7 @@
 /// <reference types="node" />
 /// <reference types="node" />
 import { BitcoindBlock } from "./BitcoindBlock";
-import { BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx } from "@atomiqlabs/base";
+import { BitcoinNetwork, BitcoinRpc, BtcBlockWithTxs, BtcSyncInfo, BtcTx } from "@atomiqlabs/base";
 import { Buffer } from "buffer";
 export type BitcoindVout = {
     value: number;
@@ -42,7 +42,8 @@ export type BitcoindTransaction = {
 };
 export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     rpc: any;
-    constructor(protocol: string, user: string, pass: string, host: string, port: number, timeout?: number);
+    network: BitcoinNetwork;
+    constructor(protocol: string, user: string, pass: string, host: string, port: number, timeout?: number, network?: BitcoinNetwork);
     getTipHeight(): Promise<number>;
     getBlockHeader(blockhash: string): Promise<BitcoindBlock | null>;
     isInMainChain(blockhash: string): Promise<boolean>;
@@ -66,4 +67,8 @@ export declare class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
         vsize: number;
         feeRate: number;
     }>;
+    /**
+     * @inheritDoc
+     */
+    outputScriptToAddress(outputScriptHex: string): Promise<string>;
 }
