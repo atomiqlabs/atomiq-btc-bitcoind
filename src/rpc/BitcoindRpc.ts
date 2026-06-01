@@ -215,15 +215,20 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
     }
 
     async isInMainChain(blockhash: string): Promise<boolean> {
-        const retrievedHeader = await new Promise<BitcoindBlockType>((resolve, reject) => {
+        const retrievedHeader = await new Promise<BitcoindBlockType | null>((resolve, reject) => {
             this.rpc.getBlockHeader(blockhash, true, (err: any, info: {result: BitcoindBlockType}) => {
                 if(err) {
+                    if(err.code===-5) {
+                        resolve(null);
+                        return;
+                    }
                     reject(err);
                     return;
                 }
                 resolve(info.result);
             });
         });
+        if(retrievedHeader==null) return false;
         return retrievedHeader.confirmations>0;
     }
 

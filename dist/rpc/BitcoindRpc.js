@@ -108,12 +108,18 @@ class BitcoindRpc {
             const retrievedHeader = yield new Promise((resolve, reject) => {
                 this.rpc.getBlockHeader(blockhash, true, (err, info) => {
                     if (err) {
+                        if (err.code === -5) {
+                            resolve(null);
+                            return;
+                        }
                         reject(err);
                         return;
                     }
                     resolve(info.result);
                 });
             });
+            if (retrievedHeader == null)
+                return false;
             return retrievedHeader.confirmations > 0;
         });
     }
