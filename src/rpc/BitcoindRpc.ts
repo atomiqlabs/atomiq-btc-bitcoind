@@ -89,9 +89,10 @@ type BitcoindBlockchainInfo = {
 }
 
 type TxIndexStatus = {
-    enabled: boolean;
-    synced: boolean;
-    height?: number;
+    txindex?: {
+        synced: boolean;
+        best_block_height: number;
+    }
 };
 
 type BitcoindRawPackageResponse = {
@@ -385,7 +386,7 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
                 resolve(info.result);
             });
         });
-        const txIndexSyncedAndEnabled = txIndexInfo.synced && txIndexInfo.enabled;
+        const txIndexSyncedAndEnabled = txIndexInfo.txindex?.synced;
         if(!txIndexSyncedAndEnabled) console.warn("BitcoindRpc: getSyncInfo(): bitcoind transaction index is disabled! Please enable it with txindex=1!");
 
         return {
