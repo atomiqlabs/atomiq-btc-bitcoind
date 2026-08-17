@@ -88,6 +88,13 @@ type BitcoindBlockchainInfo = {
     warnings : string
 }
 
+type TxIndexStatus = {
+    txindex?: {
+        synced: boolean;
+        best_block_height: number;
+    }
+};
+
 type BitcoindRawPackageResponse = {
     package_msg: string,
     "tx-results": {
@@ -370,8 +377,20 @@ export class BitcoindRpc implements BitcoinRpc<BitcoindBlock> {
             });
         });
 
+        const txIndexInfo = await new Promise<TxIndexStatus>((resolve, reject) => {
+            this.rpc.getIndexInfo((err: any, info: {result: TxIndexStatus}) => {
+                if(err) {
+                    reject(err);
+                    return;
+                }
+                resolve(info.result);
+            });
+        });
+        const txIndexSyncedAndEnabled = txIndexInfo.txindex?.synced;
+        if(!txIndexSyncedAndEnabled) console.warn("BitcoindRpc: getSyncInfo(): bitcoind transaction index is disabled! Please enable it with txindex=1!");
+
         return {
-            ibd: blockchainInfo.initialblockdownload,
+            ibd: blockchainInfo.initialblockdownload || !txIndexSyncedAndEnabled,
             verificationProgress: blockchainInfo.verificationprogress,
             headers: blockchainInfo.headers,
             blocks: blockchainInfo.blocks,

@@ -241,6 +241,7 @@ class BitcoindRpc {
         });
     }
     getSyncInfo() {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             const blockchainInfo = yield new Promise((resolve, reject) => {
                 this.rpc.getBlockchainInfo((err, info) => {
@@ -251,8 +252,20 @@ class BitcoindRpc {
                     resolve(info.result);
                 });
             });
+            const txIndexInfo = yield new Promise((resolve, reject) => {
+                this.rpc.getIndexInfo((err, info) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve(info.result);
+                });
+            });
+            const txIndexSyncedAndEnabled = (_a = txIndexInfo.txindex) === null || _a === void 0 ? void 0 : _a.synced;
+            if (!txIndexSyncedAndEnabled)
+                console.warn("BitcoindRpc: getSyncInfo(): bitcoind transaction index is disabled! Please enable it with txindex=1!");
             return {
-                ibd: blockchainInfo.initialblockdownload,
+                ibd: blockchainInfo.initialblockdownload || !txIndexSyncedAndEnabled,
                 verificationProgress: blockchainInfo.verificationprogress,
                 headers: blockchainInfo.headers,
                 blocks: blockchainInfo.blocks,
